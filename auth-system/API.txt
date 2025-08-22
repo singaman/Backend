@@ -1,0 +1,248 @@
+openapi: 3.0.1
+info:
+  title: Secure Auth System API
+  version: 1.0.0
+  description: API for authentication system (registration, login, device sessions, token refresh)
+servers:
+  - url: http://localhost:3000/api
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+  /auth/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Register'
+      responses:
+        '201':
+          description: Created
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+  /auth/logout:
+    post:
+      summary: Logout current session
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out
+  /auth/refresh:
+    post:
+      summary: Refresh tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Refresh'
+      responses:
+        '200':
+          description: New tokens
+  /users/me:
+    get:
+      summary: Get profile of authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSafe'
+  /sessions:
+    get:
+      summary: List active sessions for user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Register:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+      required: [email, password, firstName, lastName]
+    Login:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        deviceInfo:
+          type: object
+    Refresh:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+        deviceId:
+          type: string
+      required: [refreshToken, deviceId]
+    LoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserSafe'
+        tokens:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+        deviceId:
+          type: string
+    UserSafe:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+Auth-system API list
+Base URL (default): http://localhost:3000/api
+
+1) Health
+ - Method: GET
+ - Path: /health
+ - Auth: no
+ - Description: server health check
+ - Example response: { "status": "OK", "timestamp": "...", "environment": "development" }
+
+2) Auth
+ a) Register
+  - Method: POST
+  - Path: /auth/register
+  - Auth: no
+  - Headers: Content-Type: application/json
+  - Body example:
+    { "email": "user@example.com", "password": "aSecurePass1", "firstName": "First", "lastName": "Last" }
+  - Success: 201, JSON with message and created user (safe fields)
+
+ b) Login
+  - Method: POST
+  - Path: /auth/login
+  - Auth: no
+  - Headers: Content-Type: application/json
+  - Body example:
+    { "email": "user@example.com", "password": "aSecurePass1", "deviceInfo": { "name": "Chrome" } }
+  - Success: 200, JSON: { "message": "Login successful", "user": {...}, "tokens": { "accessToken":"...", "refreshToken":"..." }, "deviceId":"..." }
+
+ c) Logout
+  - Method: POST
+  - Path: /auth/logout
+  - Auth: yes (Authorization: Bearer <accessToken>)
+  - Body: none required
+  - Success: 200 { "message": "Logged out successfully" }
+
+ d) Refresh tokens
+  - Method: POST
+  - Path: /auth/refresh
+  - Auth: no
+  - Headers: Content-Type: application/json
+  - Body example:
+    { "refreshToken": "<refresh-token>", "deviceId": "<deviceId>" }
+  - Success: 200, JSON with new tokens
+
+3) Users
+ a) Get current profile
+  - Method: GET
+  - Path: /users/me
+  - Auth: yes (Authorization: Bearer <accessToken>)
+  - Description: returns authenticated user's safe profile
+  - Success: 200 { "user": { "id":"...", "email":"...", "firstName":"...", "lastName":"..." } }
+
+4) Sessions
+ a) List active sessions
+  - Method: GET
+  - Path: /sessions
+  - Auth: yes (Authorization: Bearer <accessToken>)
+  - Description: list active DeviceSession records for the current user
+  - Success: 200 { "sessions": [ { /* session object */ } ] }
+
+5) Test endpoints (for quick smoke tests)
+ a) GET /test/
+  - Method: GET
+  - Path: /test/
+  - Auth: no
+  - Response: { "ok": true, "message": "Test endpoint is working" }
+
+ b) POST /test/echo
+  - Method: POST
+  - Path: /test/echo
+  - Auth: no
+  - Body: any JSON
+  - Response: { "ok": true, "received": <your JSON> }
+
+ c) GET /test/env
+  - Method: GET
+  - Path: /test/env
+  - Auth: no
+  - Response: { "ok": true, "environment": "development", "dbName": "auth_db" }
+
+Postman quick flow
+ 1. POST /auth/register to create a user.
+ 2. POST /auth/login to receive accessToken and refreshToken.
+ 3. Copy accessToken -> Authorization header: Bearer <accessToken>.
+ 4. Call protected endpoints: GET /users/me, GET /sessions, POST /auth/logout.
+ 5. Use POST /auth/refresh with refreshToken + deviceId to rotate tokens.
+
+Notes
+ - If your app runs on a different PORT, replace 3000 in the base URL.
+ - Ensure MySQL and Redis are running and `.env` contains correct DB/Redis creds.
+ - Some services (tokenService, deviceService) are basic placeholders; tokens/sessions behavior depends on their implementation. If tokens are missing or incorrect, implement `services/tokenService.js` and `services/deviceService.js` as planned.
+
+End of API list
